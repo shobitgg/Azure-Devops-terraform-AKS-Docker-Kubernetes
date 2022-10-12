@@ -1,6 +1,6 @@
 | Language | Framework | Platform | Author |
 | -------- | -------- |--------|--------|
-| Nodejs | Express | Azure Web App, devops | Shobit G , Leelavathi T
+| Nodejs | Express | Azure Web App, devops | Shobit G 
 
 
 # Nodejs Express web application
