@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: demo-application
-        image: demoappcontainerregistery.azurecr.io/shobitdemoapplication:0.0.1
+        image: demoappcontainerregistery.azurecr.io/shobitdemoapplication:latest
         ports:
         - containerPort: 80
 
