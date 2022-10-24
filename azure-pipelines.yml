@@ -69,7 +69,8 @@ stages:
       inputs:
         SourceFolder: '$(System.DefaultWorkingDirectory)'
         Contents: |
-         **/K8s/deployment.yaml
+         **/manifests/deployment.yaml
+         **/manifests/service.yaml
      
         TargetFolder: '$(Build.ArtifactStagingDirectory)'
         CleanTargetFolder: true
@@ -117,7 +118,7 @@ stages:
               trafficSplitMethod: 'smi'
               percentage: '80'
               baselineAndCanaryReplicas: '1'
-              manifests: '$(Pipeline.Workspace)/K8s/deployment.yaml'
+              manifests: '$(Pipeline.Workspace)/manifests/deployment.yaml'
               containers: '$(containerRegistry)/$(imageRepository):$(tag)'
               imagePullSecrets: '$(imagePullSecret)'
 
@@ -142,7 +143,7 @@ stages:
               namespace: 'shobitjava'
               command: 'apply'
               useConfigurationFile: true
-              configuration: '$(Build.DefualtWorkingDirectory)/K8s/deployment.yaml'
+              configuration: '$(Build.DefualtWorkingDirectory)/manifests/deployment.yaml'
               secretType: 'dockerRegistry'
               containerRegistryType: 'Azure Container Registry'
               azureSubscriptionEndpointForSecrets: 'Modern-Ops-Devsecops'
@@ -164,7 +165,7 @@ stages:
               action: 'deploy'
               kubernetesServiceConnection: 'demoAKScluster-shobitjava'
               namespace: '$(k8sNamespaceForPR)'
-              manifests: '$(Pipeline.Workspace)/K8s/deployment.yaml'
+              manifests: '$(Pipeline.Workspace)/manifests/deployment.yaml'
               containers: '$(containerRegistry)/$(imageRepository):$(tag)'
               imagePullSecrets: '$(imagePullSecret)'
 
