@@ -1,0 +1,19 @@
+apiVersion : apps/v1
+kind: Deployment
+metadata:
+  name: shobitggazuredevopsterraformaksdockerkubernetes 
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: shobitggazuredevopsterraformaksdockerkubernetes
+  template:
+    metadata:
+      labels:
+        app: shobitggazuredevopsterraformaksdockerkubernetes 
+    spec:
+      containers:
+        - name: shobitggazuredevopsterraformaksdockerkubernetes 
+          image: demoappcontainerregistery.azurecr.io/shobitggazuredevopsterraformaksdockerkubernetes
+          ports:
+          - containerPort: 3000
