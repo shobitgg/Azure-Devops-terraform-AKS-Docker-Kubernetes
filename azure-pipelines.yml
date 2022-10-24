@@ -1,0 +1,195 @@
+# Deploy to Azure Kubernetes Service
+# Build and push image to Azure Container Registry; Deploy to Azure Kubernetes Service
+# https://docs.microsoft.com/azure/devops/pipelines/languages/docker
+
+trigger:
+- master
+
+resources:
+- repo: self
+
+variables:
+
+  # Container registry service connection established during pipeline creation
+  dockerRegistryServiceConnection: '64c4abec-6116-4780-a7e4-a0f7e007cd8e'
+  imageRepository: 'shobitggazuredevopsterraformaksdockerkubernetes'
+  containerRegistry: 'demoappcontainerregistery.azurecr.io'
+  dockerfilePath: '**/Dockerfile'
+  tag: '$(Build.BuildId)'
+  imagePullSecret: 'demoappcontainerregistery45468908-auth'
+
+  # Agent VM image name
+  vmImageName: 'ubuntu-latest'
+
+  # Name of the new namespace being created to deploy the PR changes.
+  k8sNamespaceForPR: 'review-app-$(System.PullRequest.PullRequestId)'
+
+stages:
+- stage: Build
+  displayName: Build stage
+  jobs:
+  - job: Build
+    displayName: Build
+    pool:
+      vmImage: $(vmImageName)
+    steps:
+    - task: Npm@1
+      displayName: 'Install Application Dependencies'
+      inputs:
+        workingDir: '$(System.DefaultWorkingDirectory)'
+        verbose: false
+
+    - task: Npm@1
+      displayName: 'Run ''build'' script'
+      inputs:
+        command: custom
+        workingDir: '$(System.DefaultWorkingDirectory)'
+        verbose: false
+        customCommand: 'run build --if-present'
+
+    - task: Npm@1
+      displayName: 'Remove extraneous packages'
+      inputs:
+        command: custom
+        workingDir: '$(System.DefaultWorkingDirectory)'
+        verbose: false
+        customCommand: 'prune --production'
+
+    - task: Docker@2
+      displayName: Build and push an image to container registry
+      inputs:
+        command: buildAndPush
+        repository: $(imageRepository)
+        dockerfile: $(dockerfilePath)
+        containerRegistry: $(dockerRegistryServiceConnection)
+        tags: |
+          $(tag)
+    - task: CopyFiles@2
+      displayName: 'Copy Files to: $(Build.ArtifactStagingDirectory)'
+      inputs:
+        SourceFolder: '$(System.DefaultWorkingDirectory)'
+        Contents: |
+         **/K8s/deployment.yaml
+     
+        TargetFolder: '$(Build.ArtifactStagingDirectory)'
+        CleanTargetFolder: true
+        OverWrite: true
+
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Artifact: drop Folder'
+
+
+    # - upload: manifests
+    #   artifact: manifests
+
+- stage: Deploy
+  displayName: Deploy stage
+  dependsOn: Build
+
+  jobs:
+  - deployment: Deploy
+    condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/pull/')))
+    displayName: Deploy
+    pool:
+      vmImage: $(vmImageName)
+    environment: 'shobitggAzureDevopsterraformAKSDockerKubernetes.shobitjava'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: KubernetesManifest@0
+            displayName: Create imagePullSecret
+            inputs:
+              action: 'createSecret'
+              kubernetesServiceConnection: 'demoAKScluster-shobitjava'
+              namespace: 'shobitjava'
+              secretType: 'dockerRegistry'
+              secretName: '$(imagePullSecret)'
+              dockerRegistryEndpoint: '$(dockerRegistryServiceConnection)'
+
+          - task: KubernetesManifest@0
+            displayName: Deploy to Kubernetes cluster
+            inputs:
+              action: 'deploy'
+              kubernetesServiceConnection: 'demoAKScluster-shobitjava'
+              namespace: 'shobitjava'
+              strategy: 'canary'
+              trafficSplitMethod: 'smi'
+              percentage: '80'
+              baselineAndCanaryReplicas: '1'
+              manifests: '$(Pipeline.Workspace)/K8s/deployment.yaml'
+              containers: '$(containerRegistry)/$(imageRepository):$(tag)'
+              imagePullSecrets: '$(imagePullSecret)'
+
+  - deployment: DeployPullRequest
+    displayName: Deploy Pull request
+    condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/pull/'))
+    pool:
+      vmImage: $(vmImageName)
+
+    environment: 'shobitggAzureDevopsterraformAKSDockerKubernetes.$(k8sNamespaceForPR)'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - reviewApp: shobitjava
+
+          - task: Kubernetes@1
+            displayName: 'Create a new namespace for the pull request'
+            inputs:
+              connectionType: 'Kubernetes Service Connection'
+              kubernetesServiceEndpoint: 'demoAKScluster-shobitjava'
+              namespace: 'shobitjava'
+              command: 'apply'
+              useConfigurationFile: true
+              configuration: '$(Build.DefualtWorkingDirectory)/K8s/deployment.yaml'
+              secretType: 'dockerRegistry'
+              containerRegistryType: 'Azure Container Registry'
+              azureSubscriptionEndpointForSecrets: 'Modern-Ops-Devsecops'
+              azureContainerRegistry: 'demoappcontainerregistery.azurecr.io'
+
+          - task: KubernetesManifest@0
+            displayName: Create imagePullSecret
+            inputs:
+              action: 'createSecret'
+              kubernetesServiceConnection: 'demoAKScluster-shobitjava'
+              namespace: '$(k8sNamespaceForPR)'
+              secretType: 'dockerRegistry'
+              secretName: '$(imagePullSecret)'
+              dockerRegistryEndpoint: '$(dockerRegistryServiceConnection)'
+
+          - task: KubernetesManifest@0
+            displayName: Deploy to the new namespace in the Kubernetes cluster
+            inputs:
+              action: 'deploy'
+              kubernetesServiceConnection: 'demoAKScluster-shobitjava'
+              namespace: '$(k8sNamespaceForPR)'
+              manifests: '$(Pipeline.Workspace)/K8s/deployment.yaml'
+              containers: '$(containerRegistry)/$(imageRepository):$(tag)'
+              imagePullSecrets: '$(imagePullSecret)'
+
+          - task: Kubernetes@1
+            name: get
+            displayName: 'Get services in the new namespace'
+            continueOnError: true
+            inputs:
+              connectionType: 'Kubernetes Service Connection'
+              namespace: '$(k8sNamespaceForPR)'
+              command: 'get'
+              arguments: 'svc'
+              secretType: 'dockerRegistry'
+              containerRegistryType: 'Azure Container Registry'
+              azureSubscriptionEndpointForSecrets: 'Modern-Ops-Devsecops'
+              azureContainerRegistry: 'demoappcontainerregistery.azurecr.io'
+              secretName: '$(imagePullSecret)'
+              outputFormat: 'jsonpath=''http://{.items[0].status.loadBalancer.ingress[0].ip}:{.items[0].spec.ports[0].port}'''
+
+          # Getting the IP of the deployed service and writing it to a variable for posing comment
+          - script: |
+              url="$(get.KubectlOutput)"
+              message="Your review app has been deployed"
+              if [ ! -z "$url" -a "$url" != "http://:" ]
+              then
+                message="${message} and is available at $url.<br><br>[Learn More](https://aka.ms/testwithreviewapps) about how to test and provide feedback for the app."
+              fi
+              echo "##vso[task.setvariable variable=GITHUB_COMMENT]$message"
