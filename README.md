@@ -1,6 +1,6 @@
 | Language | Framework | Platform | Author |
 | -------- | -------- |--------|--------|
-| Nodejs | Express | Azure Web App, devops | Shobit G 
+| Nodejs | Express | Azure Devops, CICD  | Shobit G 
 
 
 # Nodejs Express web application
